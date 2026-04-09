@@ -7,7 +7,10 @@ from threading import Thread
 from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
+from jupyter_client.manager import kernelspec
+
 from molten.runtime_state import RuntimeState
+from molten.utils import notify_info
 
 
 class JupyterAPIClient:
@@ -108,7 +111,10 @@ class JupyterAPIManager:
             self._headers = {'Authorization': f'token {token[0]}'}
         else:
             # Run notebook with --NotebookApp.disable_check_xsrf="True".
-            self._headers = {}
+            self._headers = {
+                "X-XSRFToken": "XSRF",
+                "Cookie": "_xsrf=XSRF",
+            }
 
         import requests
         self.requests = requests
@@ -120,6 +126,19 @@ class JupyterAPIManager:
         self._kernel_info = json.loads(response.text)
         assert "id" in self._kernel_info, "Could not connect to Jupyter Server API. The URL specified may be incorrect."
         self._kernel_api_base = f"{url}/{self._kernel_info['id']}"
+        self.kernel_spec = kernelspec.KernelSpec()
+        # self.get_kernel_specs()
+
+    def get_kernel_specs(self) -> None:
+        url = f"{self._base_url}/api/kernelspecs"
+        response = self.requests.get(url,
+                                     headers=self._headers)
+        kernel_name = self._kernel_info['name']
+        kernelspecs = json.loads(response.text)['kernelspecs']
+        _, matching_kernel = dict(
+                filter(lambda s: s.name == kernel_name or s.spec.metadata.conda_raw_kernel_name == kernel_name ,kernelspecs.items())
+        ).items()
+        self.kernel_spec = matching_kernel
 
     def client(self) -> JupyterAPIClient:
         return JupyterAPIClient(url=self._base_url,
