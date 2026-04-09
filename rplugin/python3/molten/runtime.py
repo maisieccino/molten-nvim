@@ -21,6 +21,7 @@ from molten.outputchunks import (
 )
 from molten.runtime_state import RuntimeState
 from molten.jupyter_server_api import JupyterAPIClient, JupyterAPIManager
+from molten.utils import notify_info
 
 
 class JupyterRuntime:
@@ -47,6 +48,7 @@ class JupyterRuntime:
             self.external_kernel = False
             self.kernel_manager = JupyterAPIManager(kernel_name)
             self.kernel_manager.start_kernel()
+            self.kernel_manager.get_kernel_specs()
             self.kernel_client = self.kernel_manager.client()
             self.kernel_client.start_channels()
             self.options = options

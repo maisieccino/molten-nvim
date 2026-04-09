@@ -7,7 +7,10 @@ from threading import Thread
 from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
+from jupyter_client.kernelspec import KernelSpec
 from jupyter_client.manager import kernelspec
+from pynvim import Nvim
+from traitlets import Unicode
 
 from molten.runtime_state import RuntimeState
 from molten.utils import notify_info
@@ -100,6 +103,8 @@ class JupyterAPIClient:
         pass
 
 class JupyterAPIManager:
+    kernel_spec: KernelSpec = KernelSpec()
+
     def __init__(self,
                  url: str,
                  ):
@@ -107,6 +112,7 @@ class JupyterAPIManager:
         self._base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
         token = parse_qs(parsed_url.query).get("token")
+        self.requested_kernel_name = parse_qs(parsed_url.query).get("kernel_name") or ""
         if token:
             self._headers = {'Authorization': f'token {token[0]}'}
         else:
@@ -122,11 +128,11 @@ class JupyterAPIManager:
     def start_kernel(self) -> None:
         url = f"{self._base_url}/api/kernels"
         response = self.requests.post(url,
+                                      json={'name': self.requested_kernel_name},
                                  headers=self._headers)
         self._kernel_info = json.loads(response.text)
         assert "id" in self._kernel_info, "Could not connect to Jupyter Server API. The URL specified may be incorrect."
         self._kernel_api_base = f"{url}/{self._kernel_info['id']}"
-        self.kernel_spec = kernelspec.KernelSpec()
         # self.get_kernel_specs()
 
     def get_kernel_specs(self) -> None:
@@ -135,10 +141,18 @@ class JupyterAPIManager:
                                      headers=self._headers)
         kernel_name = self._kernel_info['name']
         kernelspecs = json.loads(response.text)['kernelspecs']
-        _, matching_kernel = dict(
-                filter(lambda s: s.name == kernel_name or s.spec.metadata.conda_raw_kernel_name == kernel_name ,kernelspecs.items())
-        ).items()
-        self.kernel_spec = matching_kernel
+        def filter_kernelspecs(kernelspec: tuple[str, Any]) -> bool:
+            if kernelspec[0] == kernel_name:
+                return True
+            # Try conda metadata
+            metadata = kernelspec[1]['spec']['metadata']
+            if 'conda_raw_kernel_name' in metadata:
+                return metadata['conda_raw_kernel_name'] == kernel_name
+            return False
+        matching_kernels = list(filter(filter_kernelspecs, kernelspecs.items()))
+        if len(matching_kernels) >= 1:
+            kernel = matching_kernels[0][1]
+            self.kernel_spec = KernelSpec(**kernel['spec'])
 
     def client(self) -> JupyterAPIClient:
         return JupyterAPIClient(url=self._base_url,
