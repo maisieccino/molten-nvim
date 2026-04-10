@@ -112,7 +112,7 @@ class JupyterAPIManager:
         self._base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
         token = parse_qs(parsed_url.query).get("token")
-        self.requested_kernel_name = parse_qs(parsed_url.query).get("kernel_name") or ""
+        self.requested_kernel_name = (parse_qs(parsed_url.query).get("kernel_name") or [""])[0] or ""
         if token:
             self._headers = {'Authorization': f'token {token[0]}'}
         else:
@@ -127,8 +127,11 @@ class JupyterAPIManager:
 
     def start_kernel(self) -> None:
         url = f"{self._base_url}/api/kernels"
+        body = {}
+        if self.requested_kernel_name != "":
+            body['name'] = self.requested_kernel_name
         response = self.requests.post(url,
-                                      json={'name': self.requested_kernel_name},
+                                      json=body,
                                  headers=self._headers)
         self._kernel_info = json.loads(response.text)
         assert "id" in self._kernel_info, "Could not connect to Jupyter Server API. The URL specified may be incorrect."

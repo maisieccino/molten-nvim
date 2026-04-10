@@ -47,6 +47,8 @@ class JupyterRuntime:
         if kernel_name.startswith("http://") or kernel_name.startswith("https://"):
             self.external_kernel = False
             self.kernel_manager = JupyterAPIManager(kernel_name)
+            notify_info(nvim, f"url: {self.kernel_manager._base_url}")
+            notify_info(nvim, f"kernel: {self.kernel_manager.requested_kernel_name}")
             self.kernel_manager.start_kernel()
             self.kernel_manager.get_kernel_specs()
             self.kernel_client = self.kernel_manager.client()
