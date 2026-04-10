@@ -118,6 +118,7 @@ def import_outputs(nvim: Nvim, kernel: MoltenKernel, filepath: str):
 def handle_output_types(nvim: Nvim, output_type: str, kernel: MoltenKernel, output_data):
     chunk = None
     success = True
+    _ = output_data.pop("output_type")
     match output_type:
         case "stream":
             chunk = to_outputchunk(

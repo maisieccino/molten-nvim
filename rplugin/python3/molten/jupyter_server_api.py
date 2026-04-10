@@ -1,5 +1,6 @@
 import json
 import time
+import struct
 import uuid
 from queue import Empty as EmptyQueueException
 from queue import Queue
@@ -7,6 +8,8 @@ from threading import Thread
 from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
+from jupyter_client.session import json_packer, json_unpacker
+from jupyter_client.jsonutil import extract_dates
 from jupyter_client.kernelspec import KernelSpec
 from jupyter_client.manager import kernelspec
 from pynvim import Nvim
@@ -14,7 +17,6 @@ from traitlets import Unicode
 
 from molten.runtime_state import RuntimeState
 from molten.utils import notify_info
-
 
 class JupyterAPIClient:
     def __init__(self,
@@ -29,6 +31,7 @@ class JupyterAPIClient:
 
         import requests
         self.requests = requests
+        self.nvim: Nvim
 
     def get_stdin_msg(self, **kwargs):
         return None
@@ -66,8 +69,8 @@ class JupyterAPIClient:
 
     def _recv_message(self) -> None:
         while True:
-            response = json.loads(self._socket.recv())
-            self._recv_queue.put(response)
+            msg =self._socket.recv()
+            _ = self._recv_queue.put(json.loads(msg) or {})
 
     def get_iopub_msg(self, **kwargs):
         if self._recv_queue.empty():
@@ -80,11 +83,13 @@ class JupyterAPIClient:
     def execute(self, code: str):
         header = {
             'msg_type': 'execute_request',
-            'msg_id': uuid.uuid1().hex,
-            'session': uuid.uuid1().hex
+            'msg_id': uuid.uuid4().hex,
+            'session': uuid.uuid4().hex,
+            'version': '5.0',
         }
 
-        message = json.dumps({
+        message = {
+            'channel': 'shell',
             'header': header,
             'parent_header': header,
             'metadata': {},
@@ -92,8 +97,8 @@ class JupyterAPIClient:
                 'code': code,
                 'silent': False
             }
-        })
-        self._socket.send(message)
+        }
+        _ = self._socket.send(json.dumps(message))
 
     def shutdown(self):
         self.requests.delete(self._kernel_api_base,
